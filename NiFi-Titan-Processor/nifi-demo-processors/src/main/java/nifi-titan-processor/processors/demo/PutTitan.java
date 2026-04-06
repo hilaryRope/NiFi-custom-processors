@@ -9,12 +9,13 @@ import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnShutdown;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.flowfile.FlowFile;
-import org.apache.nifi.logging.ProcessorLog;
+import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.InputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
+import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
@@ -23,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.util.*;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Tags({"TitanDb", "insert", "put", "turbine"})
@@ -99,18 +101,20 @@ public class PutTitan extends AbstractProcessor {
             transaction = titanGraph.newTransaction();
             GraphTraversalSource g = transaction.traversal();
 
-            Vertex fromNode = g.V().has(vPropertyName, jsonObject.getString("origin")).next();
-            Vertex toNode = g.V().has(vPropertyName, jsonObject.getString("destination")).next();
+            Optional<Vertex> fromOptional = g.V().has(vPropertyName, jsonObject.getString("origin")).tryNext();
+            Optional<Vertex> toOptional = g.V().has(vPropertyName, jsonObject.getString("destination")).tryNext();
 
-            if (fromNode == null) {
+            if (!fromOptional.isPresent()) {
                 session.adjustCounter("From node not found", 1, true);
             }
 
-            if (toNode == null) {
+            if (!toOptional.isPresent()) {
                 session.adjustCounter("To node not found", 1, true);
             }
 
-            if (fromNode != null && toNode != null) {
+            if (fromOptional.isPresent() && toOptional.isPresent()) {
+                Vertex fromNode = fromOptional.get();
+                Vertex toNode = toOptional.get();
 
                 String time = jsonObject.getString("time");
                 String date = jsonObject.getString("date");
@@ -120,8 +124,8 @@ public class PutTitan extends AbstractProcessor {
                 String destination = jsonObject.getString("destination");
 
 
-                //We are just adding a counter in case the edge attached to fromNode is not null
-                if (g.V(fromNode).out("allocation") != null) {
+                //We are just adding a counter in case the edge attached to fromNode already exists
+                if (g.V(fromNode).out("allocation").hasNext()) {
                     session.adjustCounter("The edge connecting fromNode with toNode already exists", 1, true);
                 }
 
@@ -130,7 +134,7 @@ public class PutTitan extends AbstractProcessor {
                 // we can tell if the allocation has been added already. A headcode can have
                 // multiple units allocated. I dont know how we deal with a unit being removed.....
                 // If we've already written it in, should we check if its been allocated else where perhaps.
-                List properties = new ArrayList();
+                List<Edge> properties = new ArrayList<>();
                 g.V(fromNode).outE("allocation").has("time", time).has("date", date).has("hcode", headcode).fill(properties);
 
                 if (properties.size() == 0) {
@@ -147,10 +151,11 @@ public class PutTitan extends AbstractProcessor {
 
             } else {
                 session.adjustCounter("Failed to write edge to Titan", 1, true);
+                throw new IOException("Vertex not found for origin='" + jsonObject.getString("origin") +
+                        "' or destination='" + jsonObject.getString("destination") + "'");
             }
 
             transaction.commit();
-            transaction.close();
 
         } catch (Exception ex) {
             session.adjustCounter("Titan transaction failed", 1, true);
@@ -158,6 +163,10 @@ public class PutTitan extends AbstractProcessor {
                 transaction.rollback();
             }
             throw new IOException(ex.toString());
+        } finally {
+            if (transaction != null && transaction.isOpen()) {
+                transaction.close();
+            }
         }
     }
 
@@ -192,7 +201,7 @@ public class PutTitan extends AbstractProcessor {
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws IOException {
 
-        ProcessorLog log = getLogger();
+        ComponentLog log = getLogger();
 
         String storageBackend = context.getProperty(STORAGE_BACKEND).getValue();
         String storageHostname = context.getProperty(STORAGE_HOSTNAME).getValue();
@@ -217,7 +226,7 @@ public class PutTitan extends AbstractProcessor {
             }
 
             if (indexHostname != null) {
-                baseConfiguration.setProperty("index.search.hostname", indexBackend);
+                baseConfiguration.setProperty("index.search.hostname", indexHostname);
             }
 
             if (storageDir != null) {

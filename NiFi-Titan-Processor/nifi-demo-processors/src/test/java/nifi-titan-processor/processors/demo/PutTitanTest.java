@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -19,7 +20,7 @@ import static org.junit.Assert.assertTrue;
 public class PutTitanTest {
 
     private final static String TEST_STORAGE_BACKEND = "inmemory";
-    private static String VERTEX_PROPERTY_NAME = "tiploc";
+    private static final String VERTEX_PROPERTY_NAME = "tiploc";
 
     private static String successJson = "{\n" +
             "  \"headcode\": \"2F52\",\n" +
@@ -66,9 +67,7 @@ public class PutTitanTest {
         //Content to be a mock file
         InputStream content = new ByteArrayInputStream(successJson.getBytes());
 
-        if (content.toString().isEmpty()) {
-            System.out.println("The content of the InputStream as converted into a String is empty");
-        }
+        assertTrue("Content should not be empty", content.available() > 0);
 
         // Generate a test runner to mock a processor in a flow
         TestRunner testRunner = TestRunners.newTestRunner(mockPutTitan);
@@ -86,7 +85,7 @@ public class PutTitanTest {
 
         List<MockFlowFile> results = testRunner.getFlowFilesForRelationship(PutTitan.SUCCESS);
         // Check we have at least one success
-        assertTrue("1 match", results.size() == 1);
+        assertEquals("Expected 1 success", 1, results.size());
         // Check the flowfile contents look correct
         MockFlowFile result = results.get(0);
         String resultValue = new String(testRunner.getContentAsByteArray(result));
@@ -102,13 +101,12 @@ public class PutTitanTest {
         assertEquals("2015/04/13", jsonObject.getString("date"));
 
         // Check the edge was written correctly
-        List properties = new ArrayList();
+        List<Map<String, Object>> properties = new ArrayList<>();
         GraphTraversalSource g = mockPutTitan.getGraph().traversal();
         g.E().hasLabel("allocation").valueMap("time", "date", "unit_type", "hcode").dedup().fill(properties);
         assertEquals(1, properties.size());
 
-        for (Object obj : properties) {
-            HashMap next = (HashMap) obj;
+        for (Map<String, Object> next : properties) {
             assertEquals("142/0", next.get("unit_type"));
             assertEquals("2015/04/13", next.get("date"));
             assertEquals("13:00", next.get("time"));
@@ -122,9 +120,7 @@ public class PutTitanTest {
         //Content to be a mock file
         InputStream content = new ByteArrayInputStream(successJson.getBytes());
 
-        if (content.toString().isEmpty()) {
-            System.out.println("The content of the InputStream as converted into a String is empty");
-        }
+        assertTrue("Content should not be empty", content.available() > 0);
 
         // Generate a test runner to mock a processor in a flow
         TestRunner testRunner = TestRunners.newTestRunner(mockPutTitan);
@@ -141,8 +137,7 @@ public class PutTitanTest {
         testRunner.assertQueueEmpty();
 
         List<MockFlowFile> results = testRunner.getFlowFilesForRelationship(PutTitan.FAILURE);
-        System.out.println("This prints the size of the MockFlowFile" + " " + results.size());
-        assertTrue("0 match", results.size() == 0);
+        assertEquals("Expected 0 failures for valid input", 0, results.size());
     }
 
     @Test
@@ -151,9 +146,7 @@ public class PutTitanTest {
         //Content to be a mock file
         InputStream content = new ByteArrayInputStream(failureJson.getBytes());
 
-        if (content.toString().isEmpty()) {
-            System.out.println("The content of the InputStream as converted into a String is empty");
-        }
+        assertTrue("Content should not be empty", content.available() > 0);
 
         // Generate a test runner to mock a processor in a flow
         TestRunner testRunner = TestRunners.newTestRunner(mockPutTitan);
@@ -170,7 +163,7 @@ public class PutTitanTest {
         testRunner.assertQueueEmpty();
 
         List<MockFlowFile> results = testRunner.getFlowFilesForRelationship(PutTitan.FAILURE);
-        assertTrue("1 match", results.size() == 1);
+        assertEquals("Expected 1 failure for unknown vertices", 1, results.size());
     }
 }
 

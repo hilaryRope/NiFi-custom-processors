@@ -25,7 +25,27 @@
     <artifactId>nifi-demo-processors</artifactId>
     <packaging>jar</packaging>
 
+    <build>
+        <sourceDirectory>${project.basedir}/src/main/java/nifi-titan-processor/processors/demo</sourceDirectory>
+        <testSourceDirectory>${project.basedir}/src/test/java/nifi-titan-processor/processors/demo</testSourceDirectory>
+    </build>
+
     <dependencies>
+        <dependency>
+            <groupId>com.thinkaurelius.titan</groupId>
+            <artifactId>titan-core</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.codehaus.jettison</groupId>
+            <artifactId>jettison</artifactId>
+            <version>1.3.7</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.5</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.nifi</groupId>
             <artifactId>nifi-api</artifactId>
